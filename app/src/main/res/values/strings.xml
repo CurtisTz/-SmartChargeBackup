@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">SmartChargeBackup</string>
+    <string name="status_waiting">等待讀卡機插入...</string>
+</resources>

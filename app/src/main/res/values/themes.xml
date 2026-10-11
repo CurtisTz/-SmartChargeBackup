@@ -1,0 +1,37 @@
+<resources xmlns:tools="http://android.com">
+    <!-- Base application theme. -->
+    <style name="Base.Theme.SmartChargeBackup" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowBackground">#0A0F1D</item>
+    </style>
+
+    <style name="Theme.SmartChargeBackup" parent="Base.Theme.SmartChargeBackup" />
+
+    <!-- 專門用來魔改 Material 3 對話框的主題 -->
+    <style name="CyberpunkDialogTheme" parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <!-- 1. 恢復標準寬度尺寸 (直向 85%，橫向 65%) -->
+        <item name="android:windowMinWidthMajor">65%</item>
+        <item name="android:windowMinWidthMinor">85%</item>
+
+        <!-- 2. 強制設定底色：消除 M3 的預設紫色/灰色疊加層 -->
+        <item name="android:background">#121829</item>
+        <item name="android:backgroundTint">#121829</item>
+        <item name="colorSurface">#121829</item>
+        <item name="colorContainer">#121829</item>
+        <item name="colorSurfaceVariant">#121829</item>
+
+        <!-- 3. 文字與色彩防衝突設定 -->
+        <item name="android:textColorPrimary">#00FFCC</item>   <!-- 標題與主要控制項 (螢光青) -->
+        <item name="android:textColorSecondary">#FFFFFF</item> <!-- 說明內文文字 (純白) -->
+
+        <!-- 4. 強制按鈕文字與圖標顏色為純白色 -->
+        <item name="colorPrimary">#FFFFFF</item>
+
+        <!-- 5. 圓角微調 (稍微保留一點科技感的硬朗微圓角) -->
+        <item name="shapeAppearanceOverlay">@style/CyberpunkDialogShape</item>
+    </style>
+
+    <!-- 圓角設定樣式 -->
+    <style name="CyberpunkDialogShape">
+        <item name="cornerSize">4dp</item>
+    </style>
+</resources>

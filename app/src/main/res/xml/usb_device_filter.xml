@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      usb-device 過濾設定：
+      class="8"  : 標準 USB 大容量儲存裝置 (隨身碟、讀卡機)
+      class="9"  : USB Hub (集線器)
+      class="0"  : 由介面定義類別 (許多複合式讀卡機在裝置層級會回報為 0)
+    -->
+    <usb-device class="8" />
+    <usb-device class="9" />
+    <usb-device class="0" />
+</resources>
