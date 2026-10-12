@@ -46,4 +46,7 @@ dependencies {
     androidTestImplementation(libs.androidx.junit)
     // 引入 MPAndroidChart 圖表庫（用於繪製溫度與電流折線圖）
     implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
+    //引入MQTT庫
+    implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5")
+    implementation("androidx.exifinterface:exifinterface:1.4.1")
 }

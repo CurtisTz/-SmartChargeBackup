@@ -55,49 +55,191 @@
             android:layout_weight="6"
             android:background="#121829"
             android:orientation="vertical"
-            android:padding="4dp"
+            android:padding="6dp"
             android:visibility="gone">
 
-            <!-- 硬體圖表標題 -->
-            <TextView
+            <!-- 頂部圖表控制列 -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="[ TELEMETRY: TEMP &amp; CURR ]"
-                android:textColor="#4A5568"
-                android:textSize="9sp"
-                android:fontFamily="monospace"
-                android:paddingStart="4dp" />
+                android:layout_marginBottom="4dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-            <!-- 硬體圖表 (溫度/電流) -->
-            <com.github.mikephil.charting.charts.LineChart
-                android:id="@+id/realtimeChart"
+                <TextView
+                    android:id="@+id/tvChartTitle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="monospace"
+                    android:text="[ 2x2 TELEMETRY MATRIX ]"
+                    android:textColor="#00FFCC"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btnSwitchChartMode"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="#1AFFFFFF"
+                    android:fontFamily="monospace"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="4dp"
+                    android:text="[ 切換為合併圖表 ]"
+                    android:textColor="#FFD740"
+                    android:textSize="10sp" />
+            </LinearLayout>
+
+            <!-- 2x2 獨立儀表矩陣 -->
+            <LinearLayout
+                android:id="@+id/gridChartLayout"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
-                android:layout_weight="1" />
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:visibility="visible">
 
-            <View
-                android:layout_width="match_parent"
-                android:layout_height="1dp"
-                android:background="#1AFFFFFF"
-                android:layout_marginTop="2dp"
-                android:layout_marginBottom="2dp" />
+                <!-- 第一排：溫度 & CPU -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:orientation="horizontal">
 
-            <!-- 速度圖表標題 -->
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="[ PERFORMANCE: SPEED MB/S ]"
-                android:textColor="#4A5568"
-                android:textSize="9sp"
-                android:fontFamily="monospace"
-                android:paddingStart="4dp" />
+                    <!-- 溫度圖表 -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_marginEnd="2dp"
+                        android:layout_weight="1"
+                        android:background="#0F1423"
+                        android:orientation="vertical"
+                        android:padding="2dp">
 
-            <!-- 速度圖表 (MB/s) -->
-            <com.github.mikephil.charting.charts.LineChart
-                android:id="@+id/speedChart"
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="monospace"
+                            android:text="[ 溫度 °C ]"
+                            android:textColor="#FF5252"
+                            android:textSize="9sp" />
+
+                        <com.github.mikephil.charting.charts.LineChart
+                            android:id="@+id/chartTemp"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent" />
+                    </LinearLayout>
+
+                    <!-- CPU 負載圖表 -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_marginStart="2dp"
+                        android:layout_weight="1"
+                        android:background="#0F1423"
+                        android:orientation="vertical"
+                        android:padding="2dp">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="monospace"
+                            android:text="[ CPU 負載 % ]"
+                            android:textColor="#FFD740"
+                            android:textSize="9sp" />
+
+                        <com.github.mikephil.charting.charts.LineChart
+                            android:id="@+id/chartCpu"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="2dp" />
+
+                <!-- 第二排：充電電流 & 備份速度 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:orientation="horizontal">
+
+                    <!-- 電流圖表 -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_marginEnd="2dp"
+                        android:layout_weight="1"
+                        android:background="#0F1423"
+                        android:orientation="vertical"
+                        android:padding="2dp">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="monospace"
+                            android:text="[ 電流 mA ]"
+                            android:textColor="#00E676"
+                            android:textSize="9sp" />
+
+                        <com.github.mikephil.charting.charts.LineChart
+                            android:id="@+id/chartCurr"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent" />
+                    </LinearLayout>
+
+                    <!-- 速度圖表 -->
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_marginStart="2dp"
+                        android:layout_weight="1"
+                        android:background="#0F1423"
+                        android:orientation="vertical"
+                        android:padding="2dp">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="monospace"
+                            android:text="[ 備份速度 MB/s ]"
+                            android:textColor="#00FFCC"
+                            android:textSize="9sp" />
+
+                        <com.github.mikephil.charting.charts.LineChart
+                            android:id="@+id/chartSpeed"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- 合併單一圖表 -->
+            <LinearLayout
+                android:id="@+id/mergedChartLayout"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
-                android:layout_weight="1" />
+                android:layout_weight="1"
+                android:background="#0F1423"
+                android:orientation="vertical"
+                android:padding="2dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:text="[ 多軌遙測綜覽圖表 ]"
+                    android:textColor="#00FFCC"
+                    android:textSize="9sp" />
+
+                <com.github.mikephil.charting.charts.LineChart
+                    android:id="@+id/chartMerged"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+            </LinearLayout>
         </LinearLayout>
 
         <TextView

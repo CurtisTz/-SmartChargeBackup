@@ -39,14 +39,31 @@ import android.content.ContentUris
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
 import android.os.storage.StorageManager
+import android.os.storage.StorageVolume
 import com.github.mikephil.charting.components.XAxis
 import com.github.mikephil.charting.components.YAxis
 import com.github.mikephil.charting.formatter.ValueFormatter
 
+
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var lineChart: LineChart
-    private lateinit var speedChart: LineChart
+    private val photoMetas = mutableListOf<PhotoMeta>()
+    private val samples = mutableListOf<DoubleArray>()   // [秒, 溫度, 電流mA, 速度MB/s]
+    private var lastTempC = 0.0
+    private var lastSampleMs = 0L
+    private var autoDialog: AlertDialog? = null
+    private lateinit var reportSender: MqttReportSender
+    private var wasInterrupted = false
+    private lateinit var chartTemp: LineChart
+    private lateinit var chartCpu: LineChart
+    private lateinit var chartCurr: LineChart
+    private lateinit var chartSpeed: LineChart
+    private lateinit var chartMerged: LineChart
+    private lateinit var gridChartLayout: LinearLayout
+    private lateinit var mergedChartLayout: LinearLayout
+    private lateinit var btnSwitchChartMode: TextView
+    private lateinit var tvChartTitle: TextView
+    private var isMergedView = false
     private var isMonitoring = false
     private var timeIndex = 0f
     private var currentSpeedKBps = 0f
@@ -69,6 +86,7 @@ class MainActivity : AppCompatActivity() {
     private var isExternalMounted = false
     private lateinit var prefs: android.content.SharedPreferences
     private var isUpdatingStorage = false // 新增：用於防止儲存更新任務重疊
+    private var cachedVolumeName: String? = null
 
     private var backupStartTime: Long = 0
     private var statsPhotos = 0; private var statsVideos = 0; private var statsSkipped = 0; private var statsBytes = 0L
@@ -92,9 +110,10 @@ class MainActivity : AppCompatActivity() {
     private val hardwareReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
-                UsbManager.ACTION_USB_DEVICE_DETACHED -> { 
+                UsbManager.ACTION_USB_DEVICE_DETACHED -> {
                     this@MainActivity.stopBackup()
-                    updateStorageInfo() 
+                    updateStorageInfo()
+                    activityScope.launch { reportSender.publishStatus("usb_detached") }
                 }
                 UsbManager.ACTION_USB_DEVICE_ATTACHED -> { 
                     updateStorageInfo()
@@ -124,6 +143,10 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setupLockScreenVisibility(); setContentView(R.layout.activity_main)
         prefs = getSharedPreferences("BackupPrefs", MODE_PRIVATE)
+
+        reportSender = MqttReportSender(this)
+        activityScope.launch { reportSender.flush() }   // 補送上次沒送成功的
+
         dashboardLayout = findViewById(R.id.dashboardLayout)
         valBackupWarning = findViewById(R.id.valBackupWarning)
         valTime = findViewById(R.id.valTime); valTemp = findViewById(R.id.valTemp); valCpu = findViewById(R.id.valCpu)
@@ -133,8 +156,17 @@ class MainActivity : AppCompatActivity() {
         valEstimateTime = findViewById(R.id.valEstimateTime); valBackupSpeed = findViewById(R.id.valBackupSpeed); valPhotoCount = findViewById(R.id.valPhotoCount); valVideoCount = findViewById(R.id.valVideoCount)
         btnPause = findViewById(R.id.btnPause); btnStop = findViewById(R.id.btnStop)
         sdCardName = findViewById(R.id.sdCardName); sdCardSpaceBar = findViewById(R.id.sdCardSpaceBar); sdCardSpaceText = findViewById(R.id.sdCardSpaceText)
-        lineChart = findViewById(R.id.realtimeChart); speedChart = findViewById(R.id.speedChart)
         chartContainer = findViewById(R.id.chartContainer); toggleHintText = findViewById(R.id.toggleHintText)
+        gridChartLayout = findViewById(R.id.gridChartLayout); mergedChartLayout = findViewById(R.id.mergedChartLayout)
+        btnSwitchChartMode = findViewById(R.id.btnSwitchChartMode); tvChartTitle = findViewById(R.id.tvChartTitle)
+
+        chartTemp = findViewById(R.id.chartTemp)
+        chartCpu = findViewById(R.id.chartCpu)
+        chartCurr = findViewById(R.id.chartCurr)
+        chartSpeed = findViewById(R.id.chartSpeed)
+        chartMerged = findViewById(R.id.chartMerged)
+
+        btnSwitchChartMode.setOnClickListener { toggleChartDisplayMode() }
         loadTargetUri(); dashboardLayout.visibility = View.VISIBLE; updateStorageInfo()
         btnPause.setOnClickListener { if (!isMonitoring) { if (usbTreeUri == null) openDocumentTreeLauncher.launch(null) else manualStartBackup() } else togglePause() }
         btnStop.setOnClickListener { stopBackup() }
@@ -146,7 +178,12 @@ class MainActivity : AppCompatActivity() {
         val toggleLayoutClickListener = View.OnClickListener { toggleChartVisibility() }
         infoPanel.setOnClickListener(toggleLayoutClickListener); toggleHintText.setOnClickListener(toggleLayoutClickListener); rootLayout.setOnClickListener(toggleLayoutClickListener)
         registerHardwareReceivers(); handler.post(updateRunnable)
-        handleUsbIntent(intent)
+        if (savedInstanceState == null) handleUsbIntent(intent)
+        if (hasStoragePermission() &&
+            ContextCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_MEDIA_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            androidx.core.app.ActivityCompat.requestPermissions(
+                this, arrayOf(android.Manifest.permission.ACCESS_MEDIA_LOCATION), 1003)
+        }
     }
 
     private fun updateSystemStatus(providedIntent: Intent? = null) {
@@ -161,13 +198,44 @@ class MainActivity : AppCompatActivity() {
             valPower.text = String.format(Locale.getDefault(), "%.1fW", pwr)
             valVolt.text = String.format(Locale.getDefault(), "%.1fV", volt)
             valCurr.text = String.format(Locale.getDefault(), "%.0fmA", curr)
-            
-            addEntryToChart(temp.toFloat(), curr.toFloat())
+
+            lastTempC = temp
+            if (isMonitoring) recordSample(temp, curr)
+
+            val cpuStr = getCpuStatus()
+            valCpu.text = cpuStr
+            val cpuVal = cpuStr.substringAfter("LOAD: ").substringBefore("%").toFloatOrNull() ?: 10f
+
+            addEntryToChart(temp.toFloat(), cpuVal, curr.toFloat(), currentSpeedKBps / 1024f)
             if (!isMonitoring) voltCurrText.text = if (usbTreeUri == null) "等待授權 SD 卡路徑..." else "系統就緒"
         }
     }
 
+    private fun recordSample(temp: Double, curr: Double) {
+        val now = System.currentTimeMillis()
+        if (now - lastSampleMs < 5000) return   // 電池廣播也會呼叫，節流
+        lastSampleMs = now
+        samples.add(doubleArrayOf((now - backupStartTime) / 1000.0, temp, curr, currentSpeedKBps / 1024.0))
+    }
+
     private fun getCpuStatus(): String { val load = if (isMonitoring) (40..85).random() else (5..20).random(); return "LOAD: $load% (${Runtime.getRuntime().availableProcessors()} CORE)" }
+
+    private fun getStorageVolumeForUri(uri: Uri?): StorageVolume? {
+        if (uri == null) return null
+        val storageManager = getSystemService(Context.STORAGE_SERVICE) as? StorageManager ?: return null
+        val treeId = try { DocumentsContract.getTreeDocumentId(uri) } catch (e: Exception) { return null }
+        val targetUuid = treeId.substringBefore(':')
+        
+        val volumes = storageManager.storageVolumes
+        for (vol in volumes) {
+            val volUuid = vol.uuid
+            if (targetUuid.equals(volUuid, ignoreCase = true) || 
+                (targetUuid.equals("primary", ignoreCase = true) && vol.isPrimary)) {
+                return vol
+            }
+        }
+        return volumes.firstOrNull { it.isRemovable }
+    }
 
     private fun updateStorageInfo() {
         // 直接在後台啟動，透過 isUpdatingStorage 鎖保護，確保任務不重疊但能即時響應
@@ -178,44 +246,59 @@ class MainActivity : AppCompatActivity() {
             var found = false
             var totalBytes: Long = 0
             var availableBytes: Long = 0
-            var description = "外部儲存裝置"
+            var description = cachedVolumeName ?: "外部儲存裝置"
+            var isMounted = true
 
             try {
                 usbTreeUri?.let { uri ->
-                    // 1. 內核級 fstatvfs (最快路徑)
-                    try {
-                        val treeId = DocumentsContract.getTreeDocumentId(uri)
-                        val docUri = DocumentsContract.buildDocumentUriUsingTree(uri, treeId)
-                        contentResolver.openFileDescriptor(docUri, "r")?.use { pfd ->
-                            val stats = android.system.Os.fstatvfs(pfd.fileDescriptor)
-                            totalBytes = stats.f_frsize * stats.f_blocks
-                            availableBytes = stats.f_frsize * stats.f_bavail
-                            if (totalBytes > 0) {
-                                description = DocumentFile.fromTreeUri(this@MainActivity, uri)?.name ?: "USB 磁碟"
-                                found = true
+                    val volume = getStorageVolumeForUri(uri)
+                    
+                    // 1. 檢查 Volume 掛載狀態
+                    if (volume != null && volume.state != Environment.MEDIA_MOUNTED) {
+                        isMounted = false
+                        description = volume.getDescription(this@MainActivity) ?: "儲存裝置裝載中..."
+                    } else {
+                        // 2. Fast Path: 原生 POSIX statvfs (對 Volume Directory 進行 syscall，耗時 < 1ms)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && volume != null) {
+                            val dir = volume.directory
+                            if (dir != null && dir.exists()) {
+                                try {
+                                    val stats = Os.statvfs(dir.absolutePath)
+                                    totalBytes = stats.f_frsize * stats.f_blocks
+                                    availableBytes = stats.f_frsize * stats.f_bavail
+                                    if (totalBytes > 0) {
+                                        found = true
+                                        if (cachedVolumeName == null) {
+                                            cachedVolumeName = volume.getDescription(this@MainActivity)
+                                        }
+                                        description = cachedVolumeName ?: "USB 磁碟"
+                                    }
+                                } catch (e: Exception) { Log.w("Storage", "Fast-path statvfs failed, fallback to PFD", e) }
                             }
                         }
-                    } catch (e: Exception) {}
-                    
-                    // 2. SAF 根目錄查詢 (次快路徑)
-                    if (!found) {
-                        try {
-                            val rootsUri = DocumentsContract.buildRootsUri(uri.authority ?: "com.android.externalstorage.documents")
-                            contentResolver.query(rootsUri, null, null, null, null)?.use { cursor ->
-                                val availCol = cursor.getColumnIndex("available_bytes")
-                                val totalCol = cursor.getColumnIndex("total_bytes")
-                                val titleCol = cursor.getColumnIndex("title")
-                                if (cursor.moveToFirst()) {
-                                    totalBytes = if (totalCol >= 0) cursor.getLong(totalCol) else 0L
-                                    availableBytes = if (availCol >= 0) cursor.getLong(availCol) else 0L
-                                    if (titleCol >= 0) description = cursor.getString(titleCol) ?: description
-                                    found = totalBytes > 0
+
+                        // 3. Fallback Path: 透過 SAF PFD 進行 fstatvfs
+                        if (!found) {
+                            try {
+                                val treeId = DocumentsContract.getTreeDocumentId(uri)
+                                val docUri = DocumentsContract.buildDocumentUriUsingTree(uri, treeId)
+                                contentResolver.openFileDescriptor(docUri, "r")?.use { pfd ->
+                                    val stats = Os.fstatvfs(pfd.fileDescriptor)
+                                    totalBytes = stats.f_frsize * stats.f_blocks
+                                    availableBytes = stats.f_frsize * stats.f_bavail
+                                    if (totalBytes > 0) {
+                                        found = true
+                                        if (cachedVolumeName == null) {
+                                            cachedVolumeName = DocumentFile.fromTreeUri(this@MainActivity, uri)?.name
+                                        }
+                                        description = cachedVolumeName ?: "USB 磁碟"
+                                    }
                                 }
-                            }
-                        } catch (e: Exception) {}
+                            } catch (e: Exception) {}
+                        }
                     }
                 }
-            } catch (e: Exception) { Log.e("Storage", "Update error") }
+            } catch (e: Exception) { Log.e("Storage", "Update error", e) }
 
             withContext(Dispatchers.Main) {
                 if (found) {
@@ -228,6 +311,12 @@ class MainActivity : AppCompatActivity() {
                     sdCardSpaceText.text = String.format(Locale.getDefault(), "%.1f GB / %.1f GB (已使用 %.0f%%)", usedGB, totalGB, progress.toDouble())
                     sdCardSpaceBar.progress = progress
                     isExternalMounted = true
+                } else if (!isMounted) {
+                    sdCardName.text = "TARGET: $description"
+                    sdCardName.setTextColor(Color.parseColor("#FFD740"))
+                    sdCardSpaceText.text = "系統正在裝載 SD 卡 (請稍候)..."
+                    sdCardSpaceBar.progress = 0
+                    isExternalMounted = false
                 } else if (!isMonitoring) {
                     sdCardName.text = "WAITING FOR SD CARD..."
                     sdCardName.setTextColor(Color.GRAY)
@@ -235,7 +324,7 @@ class MainActivity : AppCompatActivity() {
                     sdCardSpaceBar.progress = 0
                     isExternalMounted = false
                 }
-                if (!isMonitoring) valStorage.text = if (usbTreeUri == null) (if (found) "NEED AUTH" else "MISSING") else "READY"
+                if (!isMonitoring) valStorage.text = if (usbTreeUri == null) (if (found) "NEED AUTH" else "MISSING") else (if (found) "READY" else if (!isMounted) "MOUNTING" else "MISSING")
                 isUpdatingStorage = false
             }
         }
@@ -243,14 +332,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun checkAndAutoStartBackup() {
         if (isMonitoring) return
+        if (autoDialog?.isShowing == true) return          // 新增：防止重複彈出
         if (usbTreeUri != null) {
-            // 如果已經授權過 SD 卡，啟動 3 秒倒數自動備份對話框
             val builder = AlertDialog.Builder(this, R.style.CyberpunkDialogTheme)
             builder.setTitle("⚡ 備份裝置已就緒")
             builder.setMessage("系統將在 3 秒後自動啟動備份...")
             val dialog = builder.create()
+            autoDialog = dialog                             // 新增
             dialog.show()
-            
+
             activityScope.launch {
                 delay(3000)
                 if (dialog.isShowing) {
@@ -272,6 +362,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun runBackupSequence() {
+
+
+        wasInterrupted = false
         if (isMonitoring) return
         isMonitoring = true
         isPaused = false
@@ -280,7 +373,10 @@ class MainActivity : AppCompatActivity() {
         statsSkipped = 0
         statsBytes = 0L
         backupStartTime = System.currentTimeMillis()
-        
+
+        photoMetas.clear(); samples.clear(); lastSampleMs = 0; wasInterrupted = false
+        activityScope.launch { reportSender.publishStatus("backup_started") }
+
         updateButtonStates()
         valBackupWarning.visibility = View.VISIBLE
         valStorage.text = "BACKING UP..."
@@ -339,9 +435,16 @@ class MainActivity : AppCompatActivity() {
                         if (!isActive) break
                     }
 
-                    if (copyFile(item, backupRootDir)) {
+                    val t0 = System.currentTimeMillis()
+                    val ok = copyFile(item, backupRootDir)
+                    val copyMs = (System.currentTimeMillis() - t0).coerceAtLeast(1)
+                    if (ok) {
                         if (item.isVideo) statsVideos++ else statsPhotos++
                         statsBytes += item.size
+                        val meta = withContext(Dispatchers.IO) {
+                            MediaIndexer.read(this@MainActivity, item.uri, item.name, item.isVideo, item.size, item.taken)
+                        }
+                        photoMetas.add(meta.copy(speedMBps = item.size / 1048576.0 / (copyMs / 1000.0), tempC = lastTempC))
                     }
 
                     processed++
@@ -426,12 +529,45 @@ class MainActivity : AppCompatActivity() {
         val durationMins = duration / 60000.0
         val totalMB = statsBytes / (1024.0 * 1024.0)
         val avgSpeedMin = if (durationMins > 0) totalMB / durationMins else 0.0
-        
-        val msg = String.format(Locale.getDefault(), 
+
+        val msg = String.format(Locale.getDefault(),
             "✅ 備份結束\n📸 照片: %d\n🎥 影片: %d\n⏱ 耗時: %s\n🚀 平均速度: %.1f MB/min",
             statsPhotos, statsVideos, formatMillis(duration), avgSpeedMin)
-            
-        AlertDialog.Builder(this, R.style.CyberpunkDialogTheme).setTitle("📊 備份報告").setMessage(msg).setPositiveButton("確定", null).show()
+        AlertDialog.Builder(this, R.style.CyberpunkDialogTheme)
+            .setTitle("📊 備份報告").setMessage(msg).setPositiveButton("確定", null).show()
+
+        val reportId = UUID.randomUUID().toString()
+        val deviceId = reportSender.deviceId()
+        val json = org.json.JSONObject().apply {
+            put("report_id", reportId)
+            put("device_id", deviceId)
+            put("device_name", Build.MODEL)
+            put("started_at_ms", backupStartTime)
+            put("photos", statsPhotos); put("videos", statsVideos)
+            put("duration_ms", duration)
+            put("total_bytes", statsBytes)
+            put("avg_mb_per_min", avgSpeedMin)
+            put("completed", !wasInterrupted)
+            put("samples", org.json.JSONArray().apply {
+                samples.forEach {
+                    put(org.json.JSONArray().put(Math.round(it[0])).put(Math.round(it[1] * 10) / 10.0)
+                        .put(Math.round(it[2])).put(Math.round(it[3] * 100) / 100.0))
+                }
+            })
+        }
+        val metas = photoMetas.toList()
+        val interrupted = wasInterrupted
+        val photosN = statsPhotos; val videosN = statsVideos
+        activityScope.launch {
+            reportSender.enqueue(MqttReportSender.TOPIC_REPORT, json)       // 先 report
+            if (metas.isNotEmpty()) {
+                withContext(Dispatchers.IO) { MediaIndexer.buildBatches(this@MainActivity, reportId, deviceId, metas) }
+                    .forEach { reportSender.enqueue(MqttReportSender.TOPIC_PHOTOS, it) }
+            }
+            reportSender.flush()
+            reportSender.publishStatus(if (interrupted) "backup_interrupted" else "backup_finished",
+                org.json.JSONObject().put("photos", photosN).put("videos", videosN))
+        }
     }
 
     private fun stopBackup() {
@@ -439,7 +575,8 @@ class MainActivity : AppCompatActivity() {
         AlertDialog.Builder(this, R.style.CyberpunkDialogTheme)
             .setTitle("⚡ 停止備份")
             .setMessage("確定要中斷？")
-            .setPositiveButton("是") { _, _ -> 
+            .setPositiveButton("是") { _, _ ->
+                wasInterrupted = true
                 backupJob?.cancel()
                 finishBackup(true) // 修改：停止時顯示報告統計
             }
@@ -448,59 +585,127 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupChart() {
-        val secondFormatter = object : ValueFormatter() {
-            override fun getFormattedValue(value: Float): String = "${value.toInt()}s"
-        }
+        val textColor = Color.parseColor("#8A99AD")
+        val gridColor = Color.parseColor("#1AFFFFFF")
 
-        val charts = listOf(lineChart, speedChart)
-        charts.forEach { chart ->
+        fun configureChart(chart: LineChart, minY: Float? = null, maxY: Float? = null, isAutoScaling: Boolean = false) {
             chart.apply {
-                description.isEnabled = false; setBackgroundColor(Color.parseColor("#121829")); legend.textColor = Color.WHITE
-                xAxis.apply { 
-                    textColor = Color.WHITE; position = XAxis.XAxisPosition.BOTTOM; setDrawGridLines(false)
-                    valueFormatter = secondFormatter
+                description.isEnabled = false
+                setBackgroundColor(Color.TRANSPARENT)
+                legend.textColor = Color.WHITE
+                legend.textSize = 8f
+
+                xAxis.apply {
+                    this.textColor = textColor
+                    textSize = 8f
+                    position = XAxis.XAxisPosition.BOTTOM
+                    setDrawGridLines(true)
+                    this.gridColor = gridColor
+                    valueFormatter = object : ValueFormatter() {
+                        override fun getFormattedValue(value: Float): String = "${value.toInt()}s"
+                    }
                 }
-                // 修正：徹底禁用右側 Y 軸顯示
-                axisRight.apply { 
-                    isEnabled = false // 關閉右側座標標記
-                    textColor = Color.WHITE; setDrawGridLines(false); axisMinimum = 0f 
+
+                axisRight.isEnabled = false
+
+                axisLeft.apply {
+                    this.textColor = textColor
+                    textSize = 8f
+                    setDrawGridLines(true)
+                    this.gridColor = gridColor
+                    if (minY != null) axisMinimum = minY
+                    if (maxY != null) axisMaximum = maxY
+                    if (isAutoScaling) {
+                        resetAxisMaximum() // 動態開放 Y 軸自動彈性縮放！
+                    }
                 }
+
                 data = LineData()
             }
         }
-        
-        // 硬體圖表專屬設定
-        lineChart.axisLeft.apply { textColor = Color.WHITE; setDrawGridLines(true); gridColor = Color.parseColor("#33FFFFFF"); axisMinimum = 25f; axisMaximum = 50f }
-        
-        // 速度圖表專屬設定 (MB/s)
-        speedChart.axisLeft.apply { textColor = Color.WHITE; setDrawGridLines(true); gridColor = Color.parseColor("#33FFFFFF"); axisMinimum = 0f; axisMaximum = 20f } // 調整為 20MB/s 上限
+
+        configureChart(chartTemp, minY = 20f, maxY = 60f)
+        configureChart(chartCpu, minY = 0f, maxY = 100f)
+        configureChart(chartCurr, minY = 0f, maxY = 3500f)
+        configureChart(chartSpeed, minY = 0f, isAutoScaling = true)
+        configureChart(chartMerged, minY = 0f, isAutoScaling = true)
     }
 
-    private fun addEntryToChart(t: Float, c: Float) {
-        val hData = lineChart.data ?: return
-        val sData = speedChart.data ?: return
-
-        // 硬體圖表數據集
-        if (hData.dataSetCount < 2) {
-            hData.addDataSet(LineDataSet(null, "溫度 (°C)").apply { color = Color.RED; setDrawValues(false); setDrawCircles(false); lineWidth = 2.5f; axisDependency = YAxis.AxisDependency.LEFT })
-            hData.addDataSet(LineDataSet(null, "電流 (mA)").apply { color = Color.GREEN; setDrawValues(false); setDrawCircles(false); lineWidth = 2f; axisDependency = YAxis.AxisDependency.RIGHT })
+    private fun createDataSet(label: String, color: Int): LineDataSet {
+        return LineDataSet(null, label).apply {
+            this.color = color
+            setDrawValues(false)
+            setDrawCircles(false)
+            lineWidth = 2f
+            mode = LineDataSet.Mode.CUBIC_BEZIER // 圓滑曲線
+            setDrawFilled(true) // 漸層半透明填充
+            fillColor = color
+            fillAlpha = 45
+            axisDependency = YAxis.AxisDependency.LEFT
         }
-        
-        // 速度圖表數據集 (轉換為 MB/s)
-        if (sData.dataSetCount < 1) {
-            sData.addDataSet(LineDataSet(null, "速度 (MB/s)").apply { color = Color.CYAN; setDrawValues(false); setDrawCircles(false); lineWidth = 2f; axisDependency = YAxis.AxisDependency.LEFT; setDrawFilled(true); fillColor = Color.CYAN; fillAlpha = 50 })
+    }
+
+    private fun addEntryToChart(temp: Float, cpu: Float, curr: Float, speedMBps: Float) {
+        val tData = chartTemp.data ?: return
+        val cData = chartCpu.data ?: return
+        val iData = chartCurr.data ?: return
+        val sData = chartSpeed.data ?: return
+        val mData = chartMerged.data ?: return
+
+        if (tData.dataSetCount < 1) tData.addDataSet(createDataSet("溫度 (°C)", Color.parseColor("#FF5252")))
+        if (cData.dataSetCount < 1) cData.addDataSet(createDataSet("CPU (%)", Color.parseColor("#FFD740")))
+        if (iData.dataSetCount < 1) iData.addDataSet(createDataSet("電流 (mA)", Color.parseColor("#00E676")))
+        if (sData.dataSetCount < 1) sData.addDataSet(createDataSet("速度 (MB/s)", Color.parseColor("#00FFCC")))
+
+        if (mData.dataSetCount < 4) {
+            mData.addDataSet(createDataSet("溫度 (°C)", Color.parseColor("#FF5252")))
+            mData.addDataSet(createDataSet("CPU (%)", Color.parseColor("#FFD740")))
+            mData.addDataSet(createDataSet("電流 (mA)", Color.parseColor("#00E676")))
+            mData.addDataSet(createDataSet("速度 (MB/s)", Color.parseColor("#00FFCC")))
         }
 
-        hData.addEntry(Entry(timeIndex, t), 0); hData.addEntry(Entry(timeIndex, c), 1)
-        val speedMBps = currentSpeedKBps / 1024f
+        tData.addEntry(Entry(timeIndex, temp), 0)
+        cData.addEntry(Entry(timeIndex, cpu), 0)
+        iData.addEntry(Entry(timeIndex, curr), 0)
         sData.addEntry(Entry(timeIndex, speedMBps), 0)
 
-        listOf(lineChart, speedChart).forEach { chart ->
-            chart.data.notifyDataChanged(); chart.notifyDataSetChanged()
-            chart.setVisibleXRangeMaximum(30f); chart.moveViewToX(timeIndex)
+        // 速度圖表動態彈性 Y 軸：超速 > 20MB/s 時無上限伸縮，否則維護至少 20MB/s 基準
+        if (speedMBps > 20f) {
+            chartSpeed.axisLeft.resetAxisMaximum()
+        } else {
+            if (chartSpeed.axisLeft.axisMaximum < 20f) {
+                chartSpeed.axisLeft.axisMaximum = 20f
+            }
+        }
+
+        mData.addEntry(Entry(timeIndex, temp), 0)
+        mData.addEntry(Entry(timeIndex, cpu), 1)
+        mData.addEntry(Entry(timeIndex, curr), 2)
+        mData.addEntry(Entry(timeIndex, speedMBps), 3)
+
+        listOf(chartTemp, chartCpu, chartCurr, chartSpeed, chartMerged).forEach { chart ->
+            chart.data.notifyDataChanged()
+            chart.notifyDataSetChanged()
+            chart.setVisibleXRangeMaximum(30f)
+            chart.moveViewToX(timeIndex)
             chart.invalidate()
         }
         timeIndex++
+    }
+
+    private fun toggleChartDisplayMode() {
+        isMergedView = !isMergedView
+        if (isMergedView) {
+            gridChartLayout.visibility = View.GONE
+            mergedChartLayout.visibility = View.VISIBLE
+            btnSwitchChartMode.text = "[ 切換為 2x2 矩陣 ]"
+            tvChartTitle.text = "[ TELEMETRY MULTI-TRACK ]"
+        } else {
+            gridChartLayout.visibility = View.VISIBLE
+            mergedChartLayout.visibility = View.GONE
+            btnSwitchChartMode.text = "[ 切換為合併圖表 ]"
+            tvChartTitle.text = "[ 2x2 TELEMETRY MATRIX ]"
+        }
     }
 
     private fun registerHardwareReceivers() {
@@ -525,31 +730,45 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadTargetUri() { prefs.getString("target_uri", null)?.let { try { usbTreeUri = Uri.parse(it); contentResolver.takePersistableUriPermission(usbTreeUri!!, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) } catch (e: Exception) { usbTreeUri = null } } }
-    private fun saveTargetUri(uri: Uri) { usbTreeUri = uri; contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION); prefs.edit().putString("target_uri", uri.toString()).apply() }
-    private fun resetBackupTarget() { usbTreeUri = null; prefs.edit().remove("target_uri").apply(); updateStorageInfo() }
-    private fun handleUsbIntent(intent: Intent?) { if (intent?.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) updateStorageInfo() }
+    private fun saveTargetUri(uri: Uri) { cachedVolumeName = null; usbTreeUri = uri; contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION); prefs.edit().putString("target_uri", uri.toString()).apply() }
+    private fun resetBackupTarget() { cachedVolumeName = null; usbTreeUri = null; prefs.edit().remove("target_uri").apply(); updateStorageInfo() }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent); setIntent(intent); handleUsbIntent(intent)
+    }
+    private fun handleUsbIntent(intent: Intent?) {
+        if (intent?.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
+            updateStorageInfo()
+            activityScope.launch { reportSender.publishStatus("usb_attached") }
+            checkAndAutoStartBackup()
+        }
+    }
     private fun hasStoragePermission() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED else ContextCompat.checkSelfPermission(this, android.Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
-    private fun requestStoragePermission() { val p = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) arrayOf(android.Manifest.permission.READ_MEDIA_IMAGES, android.Manifest.permission.READ_MEDIA_VIDEO) else arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE); androidx.core.app.ActivityCompat.requestPermissions(this, p, 1002) }
+    private fun requestStoragePermission() { val p = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) arrayOf(android.Manifest.permission.READ_MEDIA_IMAGES, android.Manifest.permission.READ_MEDIA_VIDEO, android.Manifest.permission.ACCESS_MEDIA_LOCATION) else arrayOf(android.Manifest.permission.READ_EXTERNAL_STORAGE); androidx.core.app.ActivityCompat.requestPermissions(this, p, 1002) }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) { super.onRequestPermissionsResult(requestCode, permissions, grantResults); if (requestCode == 1002 && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) manualStartBackup() }
     private fun formatMillis(ms: Long): String { val s = (ms / 1000) % 60; val m = (ms / 60000) % 60; val h = ms / 3600000; return if (h > 0) String.format("%02d:%02d:%02d", h, m, s) else String.format("%02d:%02d", m, s) }
     private fun togglePause() { isPaused = !isPaused; updateButtonStates() }
     private fun manualStartBackup() { if (isMonitoring) return; if (!hasStoragePermission()) { requestStoragePermission(); return }; if (usbTreeUri == null) { openDocumentTreeLauncher.launch(null); return }; runBackupSequence() }
     private fun updateButtonStates() { btnPause.text = if (!isMonitoring) (if (usbTreeUri == null) "SETUP" else "START") else (if (isPaused) "RESUME" else "PAUSE"); btnPause.backgroundTintList = android.content.res.ColorStateList.valueOf(if (!isMonitoring) Color.parseColor("#00E676") else (if (isPaused) Color.parseColor("#00FFCC") else Color.parseColor("#FFD740"))); btnStop.isEnabled = isMonitoring }
     private fun toggleChartVisibility() { isChartVisible = !isChartVisible; chartContainer.visibility = if (isChartVisible) View.VISIBLE else View.GONE; toggleHintText.text = if (isChartVisible) "[ 點擊切換為純文字 ]" else "[ 點擊彈出圖表監控 ]" }
-    private fun queryMedia(uri: Uri, list: MutableList<MediaItem>, isVideo: Boolean) { 
+    private fun queryMedia(uri: Uri, list: MutableList<MediaItem>, isVideo: Boolean) {
         val selection = "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?"
         val args = arrayOf("%DCIM/Camera%")
-        
-        contentResolver.query(uri, arrayOf(MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.MIME_TYPE, MediaStore.MediaColumns.SIZE), selection, args, null)?.use { c -> 
+        contentResolver.query(uri, arrayOf(
+            MediaStore.MediaColumns._ID, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.MIME_TYPE,
+            MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATE_TAKEN), selection, args, null)?.use { c ->
             val idCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
             val nameCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
             val mimeCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
             val sizeCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
+            val takenCol = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_TAKEN)
             while (c.moveToNext()) {
-                list.add(MediaItem(ContentUris.withAppendedId(uri, c.getLong(idCol)), c.getString(nameCol), c.getString(mimeCol), isVideo, c.getLong(sizeCol))) 
+                list.add(MediaItem(ContentUris.withAppendedId(uri, c.getLong(idCol)), c.getString(nameCol),
+                    c.getString(mimeCol), isVideo, c.getLong(sizeCol), c.getLong(takenCol)))
             }
-        } 
+        }
     }
-    private data class MediaItem(val uri: Uri, val name: String, val mime: String, val isVideo: Boolean, val size: Long)
+    private data class MediaItem(val uri: Uri, val name: String, val mime: String, val isVideo: Boolean, val size: Long, val taken: Long)
+
     override fun onDestroy() { super.onDestroy(); activityScope.cancel(); handler.removeCallbacks(updateRunnable); try { unregisterReceiver(hardwareReceiver); unregisterReceiver(mediaReceiver) } catch (e: Exception) {} }
 }
