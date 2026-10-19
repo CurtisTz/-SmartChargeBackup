@@ -1,5 +1,0 @@
-- [x] Enhance `updateStorageInfo` to resolve capacity for SAF volumes
-- [x] Implement START/STOP toggle logic for `btnStop`
-- [x] Add `manualStartBackup` logic
-- [x] Ensure buttons enable/disable correctly based on storage availability
-- [x] Verify build and storage reporting

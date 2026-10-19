@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/rootLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -15,634 +14,284 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="10dp"
+        android:layout_marginBottom="20dp"
         android:fontFamily="monospace"
         android:gravity="center"
         android:paddingTop="10dp"
         android:text="SmartChargeBackup"
         android:textColor="#00FFCC"
-        android:textSize="30sp"
+        android:textSize="34sp"
         android:textStyle="bold" />
 
-    <!-- New: Backup Warning Banner -->
-    <TextView
-        android:id="@+id/valBackupWarning"
+    <!-- Dashboard Panel (Scrollable to fit 2x2 grid + Progress) -->
+    <ScrollView
+        android:id="@+id/infoPanel"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="12dp"
-        android:background="#FF5252"
-        android:fontFamily="monospace"
-        android:gravity="center"
-        android:padding="8dp"
-        android:text="⚠️ 備份中，不可直接拔除，避免 SD 卡損壞"
-        android:textColor="#FFFFFF"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:visibility="gone" />
-
-    <!-- Dashboard Phase Layout -->
-    <LinearLayout
-        android:id="@+id/dashboardLayout"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:visibility="visible">
+        android:layout_height="0dp"
+        android:layout_weight="10"
+        android:fillViewport="true"
+        android:scrollbars="none">
 
         <LinearLayout
-            android:id="@+id/chartContainer"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="6"
-            android:background="#121829"
-            android:orientation="vertical"
-            android:padding="6dp"
-            android:visibility="gone">
-
-            <!-- 頂部圖表控制列 -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="4dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:id="@+id/tvChartTitle"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:fontFamily="monospace"
-                    android:text="[ 2x2 TELEMETRY MATRIX ]"
-                    android:textColor="#00FFCC"
-                    android:textSize="10sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:id="@+id/btnSwitchChartMode"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="#1AFFFFFF"
-                    android:fontFamily="monospace"
-                    android:paddingHorizontal="8dp"
-                    android:paddingVertical="4dp"
-                    android:text="[ 切換為合併圖表 ]"
-                    android:textColor="#FFD740"
-                    android:textSize="10sp" />
-            </LinearLayout>
-
-            <!-- 2x2 獨立儀表矩陣 -->
-            <LinearLayout
-                android:id="@+id/gridChartLayout"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:orientation="vertical"
-                android:visibility="visible">
-
-                <!-- 第一排：溫度 & CPU -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="0dp"
-                    android:layout_weight="1"
-                    android:orientation="horizontal">
-
-                    <!-- 溫度圖表 -->
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginEnd="2dp"
-                        android:layout_weight="1"
-                        android:background="#0F1423"
-                        android:orientation="vertical"
-                        android:padding="2dp">
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="monospace"
-                            android:text="[ 溫度 °C ]"
-                            android:textColor="#FF5252"
-                            android:textSize="9sp" />
-
-                        <com.github.mikephil.charting.charts.LineChart
-                            android:id="@+id/chartTemp"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent" />
-                    </LinearLayout>
-
-                    <!-- CPU 負載圖表 -->
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginStart="2dp"
-                        android:layout_weight="1"
-                        android:background="#0F1423"
-                        android:orientation="vertical"
-                        android:padding="2dp">
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="monospace"
-                            android:text="[ CPU 負載 % ]"
-                            android:textColor="#FFD740"
-                            android:textSize="9sp" />
-
-                        <com.github.mikephil.charting.charts.LineChart
-                            android:id="@+id/chartCpu"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent" />
-                    </LinearLayout>
-                </LinearLayout>
-
-                <View
-                    android:layout_width="match_parent"
-                    android:layout_height="2dp" />
-
-                <!-- 第二排：充電電流 & 備份速度 -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="0dp"
-                    android:layout_weight="1"
-                    android:orientation="horizontal">
-
-                    <!-- 電流圖表 -->
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginEnd="2dp"
-                        android:layout_weight="1"
-                        android:background="#0F1423"
-                        android:orientation="vertical"
-                        android:padding="2dp">
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="monospace"
-                            android:text="[ 電流 mA ]"
-                            android:textColor="#00E676"
-                            android:textSize="9sp" />
-
-                        <com.github.mikephil.charting.charts.LineChart
-                            android:id="@+id/chartCurr"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent" />
-                    </LinearLayout>
-
-                    <!-- 速度圖表 -->
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginStart="2dp"
-                        android:layout_weight="1"
-                        android:background="#0F1423"
-                        android:orientation="vertical"
-                        android:padding="2dp">
-
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="monospace"
-                            android:text="[ 備份速度 MB/s ]"
-                            android:textColor="#00FFCC"
-                            android:textSize="9sp" />
-
-                        <com.github.mikephil.charting.charts.LineChart
-                            android:id="@+id/chartSpeed"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent" />
-                    </LinearLayout>
-                </LinearLayout>
-            </LinearLayout>
-
-            <!-- 合併單一圖表 -->
-            <LinearLayout
-                android:id="@+id/mergedChartLayout"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:background="#0F1423"
-                android:orientation="vertical"
-                android:padding="2dp"
-                android:visibility="gone">
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:fontFamily="monospace"
-                    android:text="[ 多軌遙測綜覽圖表 ]"
-                    android:textColor="#00FFCC"
-                    android:textSize="9sp" />
-
-                <com.github.mikephil.charting.charts.LineChart
-                    android:id="@+id/chartMerged"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/toggleHintText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:fontFamily="monospace"
-            android:gravity="center"
-            android:padding="8dp"
-            android:text="[ 點擊彈出圖表監控 ]"
-            android:textColor="#4A5568"
-            android:textSize="10sp" />
+            android:orientation="vertical">
 
-        <!-- Dashboard Panel (Scrollable to fit 2x2 grid + Progress) -->
-        <ScrollView
-            android:id="@+id/infoPanel"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="8"
-            android:fillViewport="true"
-            android:scrollbars="none">
-
+            <!-- Row 1: Time & Hardware -->
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical">
+                android:layout_height="140dp"
+                android:layout_marginBottom="8dp"
+                android:orientation="horizontal">
 
-                <!-- Row 1: Time & Hardware -->
                 <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="140dp"
-                    android:layout_marginBottom="8dp"
-                    android:orientation="horizontal">
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginEnd="4dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_card_time"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:text="[ TIME ]"
+                        android:textColor="#00FFCC"
+                        android:textSize="10sp" />
+
+                    <TextView
+                        android:id="@+id/valTime"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:fontFamily="monospace"
+                        android:gravity="center"
+                        android:text="00:00:00"
+                        android:textColor="#FFFFFF"
+                        android:textSize="20sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="4dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_card_hardware"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:text="[ HARDWARE ]"
+                        android:textColor="#FF5252"
+                        android:textSize="10sp" />
+
+                    <TextView
+                        android:id="@+id/valTemp"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:fontFamily="monospace"
+                        android:gravity="center_horizontal"
+                        android:text="-- °C"
+                        android:textColor="#FF5252"
+                        android:textSize="18sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/valCpu"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:gravity="center_horizontal"
+                        android:text="LOAD: --"
+                        android:textColor="#FFD740"
+                        android:textSize="11sp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Row 2: Power & Storage -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="140dp"
+                android:layout_marginBottom="16dp"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginEnd="4dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_card_power"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:text="[ POWER ]"
+                        android:textColor="#00E676"
+                        android:textSize="10sp" />
 
                     <LinearLayout
-                        android:layout_width="0dp"
+                        android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:layout_marginEnd="4dp"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_card_time"
-                        android:orientation="vertical"
-                        android:padding="12dp">
+                        android:gravity="center"
+                        android:orientation="horizontal">
 
                         <TextView
+                            android:id="@+id/valPower"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:fontFamily="monospace"
-                            android:text="[ TIME ]"
-                            android:textColor="#00FFCC"
-                            android:textSize="10sp" />
-
-                        <TextView
-                            android:id="@+id/valTime"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:fontFamily="monospace"
-                            android:gravity="center"
-                            android:text="00:00:00"
-                            android:textColor="#FFFFFF"
+                            android:text="-- W"
+                            android:textColor="#FFFF00"
                             android:textSize="20sp"
                             android:textStyle="bold" />
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginStart="4dp"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_card_hardware"
-                        android:orientation="vertical"
-                        android:padding="12dp">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="monospace"
-                            android:text="[ HARDWARE ]"
-                            android:textColor="#FF5252"
-                            android:textSize="10sp" />
 
                         <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:gravity="center"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
                             android:orientation="vertical">
 
                             <TextView
-                                android:id="@+id/valTemp"
-                                android:layout_width="match_parent"
+                                android:id="@+id/valVolt"
+                                android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:fontFamily="monospace"
-                                android:gravity="center"
-                                android:text="-- °C"
-                                android:textColor="#FF5252"
-                                android:textSize="18sp"
-                                android:textStyle="bold" />
+                                android:text="--V"
+                                android:textColor="#00E676"
+                                android:textSize="10sp" />
 
                             <TextView
-                                android:id="@+id/valCpu"
-                                android:layout_width="match_parent"
+                                android:id="@+id/valCurr"
+                                android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:fontFamily="monospace"
-                                android:gravity="center"
-                                android:text="LOAD: --"
-                                android:textColor="#FFD740"
-                                android:textSize="15sp" />
+                                android:text="--mA"
+                                android:textColor="#00E676"
+                                android:textSize="10sp" />
                         </LinearLayout>
                     </LinearLayout>
                 </LinearLayout>
 
-                <!-- Row 2: Power & Storage -->
                 <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="140dp"
-                    android:layout_marginBottom="16dp"
-                    android:orientation="horizontal">
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginEnd="4dp"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_card_power"
-                        android:orientation="vertical"
-                        android:padding="12dp">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="monospace"
-                            android:text="[ POWER ]"
-                            android:textColor="#00E676"
-                            android:textSize="10sp" />
-
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:gravity="center"
-                            android:orientation="horizontal">
-
-                            <TextView
-                                android:id="@+id/valPower"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:fontFamily="monospace"
-                                android:text="-- W"
-                                android:textColor="#FFFF00"
-                                android:textSize="20sp"
-                                android:textStyle="bold" />
-
-                            <LinearLayout
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginStart="8dp"
-                                android:orientation="vertical">
-
-                                <TextView
-                                    android:id="@+id/valVolt"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:fontFamily="monospace"
-                                    android:text="--V"
-                                    android:textColor="#00E676"
-                                    android:textSize="10sp" />
-
-                                <TextView
-                                    android:id="@+id/valCurr"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:fontFamily="monospace"
-                                    android:text="--mA"
-                                    android:textColor="#00E676"
-                                    android:textSize="10sp" />
-                            </LinearLayout>
-                        </LinearLayout>
-                    </LinearLayout>
-
-                    <LinearLayout
-                        android:id="@+id/cardStorageContainer"
-                        android:layout_width="0dp"
-                        android:layout_height="match_parent"
-                        android:layout_marginStart="4dp"
-                        android:layout_weight="1"
-                        android:background="@drawable/bg_card_storage"
-                        android:orientation="vertical"
-                        android:padding="12dp">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="monospace"
-                            android:text="[ SD STATUS ]"
-                            android:textColor="#00FFCC"
-                            android:textSize="10sp" />
-
-                        <TextView
-                            android:id="@+id/valStorage"
-                            android:layout_width="match_parent"
-                            android:layout_height="match_parent"
-                            android:fontFamily="monospace"
-                            android:gravity="center"
-                            android:text="NO CARD"
-                            android:textColor="#FFFFFF"
-                            android:textSize="20sp"
-                            android:textStyle="bold" />
-                    </LinearLayout>
-                </LinearLayout>
-
-                <!-- Progress Section: 動態進度條 -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="#121829"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="4dp"
+                    android:layout_weight="1"
+                    android:background="@drawable/bg_card_storage"
                     android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginBottom="8dp"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:fontFamily="monospace"
-                            android:text="TASK PROGRESS"
-                            android:textColor="#00FFCC"
-                            android:textSize="12sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:id="@+id/valProgressPercent"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="monospace"
-                            android:text="0%"
-                            android:textColor="#00FFCC"
-                            android:textSize="12sp" />
-                    </LinearLayout>
-
-                    <ProgressBar
-                        android:id="@+id/taskProgressBar"
-                        style="?android:attr/progressBarStyleHorizontal"
-                        android:layout_width="match_parent"
-                        android:layout_height="8dp"
-                        android:indeterminate="false"
-                        android:progress="0" />
-
-                    <!-- New: Detailed Backup Info -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:orientation="horizontal">
-
-                        <TextView
-                            android:id="@+id/valPhotoCount"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:fontFamily="monospace"
-                            android:text="PHOTOS: 0 / 0"
-                            android:textColor="#E0E6ED"
-                            android:textSize="10sp" />
-
-                        <TextView
-                            android:id="@+id/valVideoCount"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:fontFamily="monospace"
-                            android:gravity="center"
-                            android:text="VIDEOS: 0 / 0"
-                            android:textColor="#E0E6ED"
-                            android:textSize="10sp" />
-
-                        <TextView
-                            android:id="@+id/valEstimateTime"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:fontFamily="monospace"
-                            android:gravity="center"
-                            android:text="EST: --:--"
-                            android:textColor="#FFD740"
-                            android:textSize="10sp" />
-
-                        <TextView
-                            android:id="@+id/valBackupSpeed"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:fontFamily="monospace"
-                            android:gravity="end"
-                            android:text="0 KB/s"
-                            android:textColor="#00FFCC"
-                            android:textSize="10sp" />
-                    </LinearLayout>
+                    android:padding="12dp">
 
                     <TextView
-                        android:id="@+id/valVoltCurr"
-                        android:layout_width="match_parent"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
+                        android:fontFamily="monospace"
+                        android:text="[ STORAGE ]"
+                        android:textColor="#8A99AD"
+                        android:textSize="10sp" />
+
+                    <TextView
+                        android:id="@+id/valStorage"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
                         android:fontFamily="monospace"
                         android:gravity="center"
-                        android:text="STATUS: MONITORING SYSTEM..."
-                        android:textColor="#4A5568"
-                        android:textSize="10sp" />
+                        android:text="READY"
+                        android:textColor="#E0E6ED"
+                        android:textSize="14sp" />
                 </LinearLayout>
+            </LinearLayout>
 
-                <!-- Control Buttons Section -->
+            <!-- Progress Section: 動態進度條 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="#121829"
+                android:orientation="vertical"
+                android:padding="16dp">
+
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:gravity="center"
+                    android:layout_marginBottom="8dp"
                     android:orientation="horizontal">
 
-                    <Button
-                        android:id="@+id/btnPause"
-                        android:layout_width="0dp"
-                        android:layout_height="45dp"
-                        android:layout_marginEnd="4dp"
-                        android:layout_weight="1"
-                        android:backgroundTint="#00E676"
-                        android:fontFamily="monospace"
-                        android:text="START"
-                        android:textColor="#0A0F1D"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-
-                    <Button
-                        android:id="@+id/btnStop"
-                        android:layout_width="0dp"
-                        android:layout_height="45dp"
-                        android:layout_marginStart="4dp"
-                        android:layout_weight="1"
-                        android:backgroundTint="#FF5252"
-                        android:enabled="false"
-                        android:fontFamily="monospace"
-                        android:text="STOP"
-                        android:textColor="#FFFFFF"
-                        android:textSize="12sp"
-                        android:textStyle="bold" />
-                </LinearLayout>
-
-                <!-- SD Card Section -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:background="#121829"
-                    android:orientation="horizontal"
-                    android:padding="16dp"
-                    android:gravity="center_vertical">
-
-                    <ImageView
-                        android:layout_width="40dp"
-                        android:layout_height="40dp"
-                        android:src="@drawable/ic_sd_card"
-                        android:layout_marginEnd="12dp"
-                        android:contentDescription="SD Card Icon" />
-
-                    <LinearLayout
+                    <TextView
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:orientation="vertical">
+                        android:fontFamily="monospace"
+                        android:text="TASK PROGRESS"
+                        android:textColor="#00FFCC"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
 
-                        <TextView
-                            android:id="@+id/sdCardName"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:fontFamily="monospace"
-                            android:text="NO EXTERNAL STORAGE"
-                            android:textColor="#E0E6ED"
-                            android:textSize="12sp"
-                            android:textStyle="bold" />
-
-                        <ProgressBar
-                            android:id="@+id/sdCardSpaceBar"
-                            style="?android:attr/progressBarStyleHorizontal"
-                            android:layout_width="match_parent"
-                            android:layout_height="4dp"
-                            android:layout_marginTop="4dp"
-                            android:progress="0" />
-
-                        <TextView
-                            android:id="@+id/sdCardSpaceText"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="2dp"
-                            android:fontFamily="monospace"
-                            android:text="-- / -- GB"
-                            android:textColor="#8A99AD"
-                            android:textSize="10sp" />
-                    </LinearLayout>
+                    <TextView
+                        android:id="@+id/valProgressPercent"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:text="0%"
+                        android:textColor="#00FFCC"
+                        android:textSize="12sp" />
                 </LinearLayout>
 
+                <ProgressBar
+                    android:id="@+id/taskProgressBar"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="8dp"
+                    android:indeterminate="false"
+                    android:progress="0" />
+
+                <TextView
+                    android:id="@+id/valVoltCurr"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:fontFamily="monospace"
+                    android:gravity="center"
+                    android:text="STATUS: MONITORING SYSTEM..."
+                    android:textColor="#4A5568"
+                    android:textSize="10sp" />
             </LinearLayout>
-        </ScrollView>
+
+        </LinearLayout>
+    </ScrollView>
+
+    <TextView
+        android:id="@+id/toggleHintText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        android:padding="8dp"
+        android:text="[ 點擊彈出圖表監控 ]"
+        android:textColor="#4A5568"
+        android:textSize="10sp" />
+
+    <!-- Chart Section (Default Hidden) -->
+    <LinearLayout
+        android:id="@+id/chartContainer"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="2"
+        android:background="#121829"
+        android:orientation="vertical"
+        android:padding="4dp"
+        android:visibility="gone">
+
+        <com.github.mikephil.charting.charts.LineChart
+            android:id="@+id/realtimeChart"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
     </LinearLayout>
 </LinearLayout>
